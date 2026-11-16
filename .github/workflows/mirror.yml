@@ -8,6 +8,8 @@ on:
   schedule:
     - cron: "23 9 * * *"
   workflow_dispatch:
+  push:
+    branches: [mirror]
 
 permissions:
   contents: read
