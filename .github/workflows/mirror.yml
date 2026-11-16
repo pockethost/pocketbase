@@ -1,0 +1,83 @@
+# Mirrors every PocketBase branch and tag from its own git host into this repository, once a day. Fast-forward only:
+# the push never forces, so a rewritten upstream branch or a moved tag fails the run instead of overwriting.
+# Pushes with the MIRROR_DEPLOY_KEY deploy key (write access to this repository only), because the built-in token
+# can't push commits that touch .github/workflows.
+name: mirror
+
+on:
+  schedule:
+    - cron: "23 9 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mirror
+  cancel-in-progress: false
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      SRC: https://ganigeorgiev.com/git/pocketbase/pocketbase
+    steps:
+      - name: Set up the deploy key
+        env:
+          KEY: ${{ secrets.MIRROR_DEPLOY_KEY }}
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          printf '%s\n' "$KEY" > ~/.ssh/mirror && chmod 600 ~/.ssh/mirror
+          echo "GIT_SSH_COMMAND=ssh -i $HOME/.ssh/mirror -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15" >> "$GITHUB_ENV"
+
+      - name: Fetch this mirror first
+        run: |
+          set -euo pipefail
+          git init -q --bare mirror.git
+          cd mirror.git
+          git remote add origin "git@github.com:${GITHUB_REPOSITORY}.git"
+          echo "$(date +%T) fetching the mirror's own branches and tags"
+          timeout 300 git fetch -q origin '+refs/heads/*:refs/heads/*' '+refs/tags/*:refs/tags/*'
+          echo "$(date +%T) have $(git for-each-ref refs/heads | wc -l) branches, $(git for-each-ref refs/tags | wc -l) tags"
+
+      - name: Check the source answers
+        run: |
+          set -euo pipefail
+          code=$(curl -sS -m 20 -o /dev/null -w '%{http_code}' "$SRC/info/refs?service=git-upload-pack" || echo curl-failed)
+          echo "$(date +%T) $SRC/info/refs -> $code"
+          if [ "$code" != 200 ]; then
+            echo "::error::$SRC answered $code from this runner (blocked or moved?)"
+            exit 1
+          fi
+
+      - name: Fetch from PocketBase (only new objects)
+        working-directory: mirror.git
+        run: |
+          set -euo pipefail
+          echo "$(date +%T) fetching every branch and tag from $SRC"
+          timeout 600 git fetch --no-tags "$SRC" '+refs/heads/*:refs/heads/*' '+refs/tags/*:refs/tags/*'
+          echo "$(date +%T) fetched"
+
+      - name: Push, fast-forward only
+        working-directory: mirror.git
+        run: |
+          set -euo pipefail
+          echo "$(date +%T) pushing"
+          set +e
+          out=$(timeout 300 git push --porcelain origin 'refs/heads/*:refs/heads/*' 'refs/tags/*:refs/tags/*' 2>&1)
+          rc=$?
+          set -e
+          echo "$out"
+          {
+            echo "### Mirror run"
+            echo '```'
+            echo "$out" | grep -E '^[ *+!-]	' | grep -v '^=' || echo "nothing changed"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ $rc -ne 0 ]; then
+            echo "::error::push failed (rc $rc): a branch was rewritten or a tag moved upstream, or the key lacks write access"
+            exit $rc
+          fi
+          echo "$(date +%T) done"
