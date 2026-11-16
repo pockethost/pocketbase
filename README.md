@@ -1,9 +1,9 @@
 # PocketBase mirror
 
-This is **PocketHost's official mirror of [PocketBase](https://ganigeorgiev.com/pocketbase/pocketbase)**.
+This is **PocketHost's maintained mirror of [PocketBase](https://ganigeorgiev.com/pocketbase/pocketbase)**.
 
-"Official" means PocketHost runs and maintains it, and PocketHost and [PocketOne](https://github.com/pockethost/pocketone)
-build on it. It is **not** PocketBase's own repository. PocketBase is written by Gani Georgiev and lives at
+PocketHost keeps it current, and PocketHost and [PocketOne](https://github.com/pockethost/pocketone) build on it. It is
+**not** PocketBase's own repository. PocketBase is written by Gani Georgiev and lives at
 [ganigeorgiev.com/pocketbase/pocketbase](https://ganigeorgiev.com/pocketbase/pocketbase), which is the source of truth.
 PocketBase doesn't publish a GitHub mirror itself, and PocketHost is not affiliated with or endorsed by PocketBase or
 Gani Georgiev.
